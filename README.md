@@ -17,4 +17,4 @@ git pull
 docker compose up -d --build
 ```
 Le dossier servi est `/mnt/Data2/blender-mcp/exports` (modifiable via la variable `MODELS_DIR`).
-Accessible depuis le réseau local sur `http://<ip-du-serveur>:8090` (ne pas rediriger ce port sur la box).
+Accessible depuis le réseau local sur `http://<ip-du-serveur>:8091` (port modifiable via `HOST_PORT` ; ne pas le rediriger sur la box).
