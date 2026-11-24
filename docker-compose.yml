@@ -1,0 +1,10 @@
+services:
+  galerie:
+    build: .
+    container_name: galerie-modeles
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      # dossier des modèles, monté en lecture seule
+      - ${MODELS_DIR:-/mnt/Data2/blender-mcp/exports}:/models:ro

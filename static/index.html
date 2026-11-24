@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galerie de modèles</title>
+<script type="module" src="/vendor/model-viewer.min.js"></script>
+<style>
+  :root {
+    --bg: #16181c; --panel: #1f2228; --line: #2e323a; --text: #e6e8eb; --muted: #8b919c;
+    --accent: #f08a24; --hover: #272b33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  input[type=search] { width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; }
+  #list { overflow-y: auto; flex: 1; padding: 6px 0 12px; }
+  .folder { padding: 10px 16px 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .item { display: flex; justify-content: space-between; gap: 8px; padding: 6px 16px; cursor: pointer;
+    border-left: 3px solid transparent; }
+  .item:hover { background: var(--hover); }
+  .item.active { background: var(--hover); border-left-color: var(--accent); }
+  .item small { color: var(--muted); white-space: nowrap; }
+  .item .err { color: #e5534b; }
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  model-viewer { flex: 1; width: 100%; min-height: 0; background: radial-gradient(circle at 50% 40%, #2a2e36, var(--bg)); }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; padding: 10px 16px;
+    border-top: 1px solid var(--line); background: var(--panel); }
+  .bar b { font-size: 15px; }
+  .stat { color: var(--muted); }
+  .stat em { color: var(--text); font-style: normal; }
+  .anim { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+  select, button, .bar a { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; font: inherit; cursor: pointer; text-decoration: none; }
+  button:hover, .bar a:hover { border-color: var(--accent); }
+  .empty { margin: auto; color: var(--muted); padding: 24px; text-align: center; }
+  @media (max-width: 700px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 38vh 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    .anim { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <header>
+      <h1>Galerie de modèles <span id="count"></span></h1>
+      <input type="search" id="filter" placeholder="Filtrer…" autocomplete="off">
+    </header>
+    <div id="list"></div>
+  </aside>
+  <main id="main"><div class="empty">Chargement…</div></main>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let models = [];
+let current = null;
+
+const fmtSize = (b) => b < 1024 ? `${b} o` : b < 1048576 ? `${(b / 1024).toFixed(0)} Ko` : `${(b / 1048576).toFixed(1)} Mo`;
+const fmtTris = (n) => n == null ? "?" : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+const fmtDate = (t) => new Date(t * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const url = (p) => "/models/" + p.split("/").map(encodeURIComponent).join("/");
+
+async function load() {
+  models = await (await fetch("/api/models")).json();
+  $("#count").textContent = `(${models.length})`;
+  renderList();
+  const wanted = decodeURIComponent(location.hash.slice(1));
+  const pick = models.find((m) => m.path === wanted) || models[0];
+  if (pick) show(pick); else $("#main").innerHTML = '<div class="empty">Aucun fichier .glb dans le dossier des modèles.</div>';
+}
+
+function renderList() {
+  const q = $("#filter").value.trim().toLowerCase();
+  let html = "", folder = null;
+  for (const m of models) {
+    if (q && !m.path.toLowerCase().includes(q)) continue;
+    if (m.folder !== folder) { folder = m.folder; if (folder) html += `<div class="folder">${esc(folder)}</div>`; }
+    const extra = m.error ? '<small class="err">erreur</small>'
+      : `<small>${fmtTris(m.triangles)} tri${m.animations.length ? " · ▶ " + m.animations.length : ""}</small>`;
+    html += `<div class="item${current && current.path === m.path ? " active" : ""}" data-path="${esc(m.path)}"><span>${esc(m.name)}</span>${extra}</div>`;
+  }
+  $("#list").innerHTML = html || '<div class="empty">Aucun résultat</div>';
+}
+
+function show(m) {
+  current = m;
+  history.replaceState(null, "", "#" + encodeURIComponent(m.path));
+  renderList();
+  const anims = m.animations.map((a) => `<option>${esc(a)}</option>`).join("");
+  $("#main").innerHTML = `
+    <model-viewer src="${url(m.path)}" camera-controls touch-action="pan-y" shadow-intensity="1"
+      environment-image="neutral" exposure="1" ${m.animations.length ? "autoplay" : ""}></model-viewer>
+    <div class="bar">
+      <b>${esc(m.name)}</b>
+      <span class="stat">Triangles <em>${m.triangles ?? "?"}</em></span>
+      <span class="stat">Taille <em>${fmtSize(m.size)}</em></span>
+      <span class="stat">Textures <em>${m.textures}</em></span>
+      <span class="stat">Dimensions <em id="dims">…</em></span>
+      <span class="stat">Modifié <em>${fmtDate(m.modified)}</em></span>
+      ${m.error ? `<span class="stat err">${esc(m.error)}</span>` : ""}
+      <span class="anim">
+        ${m.animations.length ? `<select id="anim">${anims}</select><button id="play">⏸</button>` : ""}
+        <a href="${url(m.path)}" download>Télécharger</a>
+      </span>
+    </div>`;
+  const mv = $("model-viewer");
+  mv.addEventListener("load", () => {
+    const d = mv.getDimensions();
+    $("#dims").textContent = `${d.x.toFixed(2)} × ${d.y.toFixed(2)} × ${d.z.toFixed(2)} m`;
+    if (m.animations.length) mv.animationName = $("#anim").value;
+  });
+  mv.addEventListener("error", () => { $("#dims").textContent = "erreur de chargement"; });
+  if (m.animations.length) {
+    $("#anim").addEventListener("change", (e) => { mv.animationName = e.target.value; mv.play(); $("#play").textContent = "⏸"; });
+    $("#play").addEventListener("click", () => {
+      if (mv.paused) { mv.play(); $("#play").textContent = "⏸"; } else { mv.pause(); $("#play").textContent = "▶"; }
+    });
+  }
+}
+
+$("#list").addEventListener("click", (e) => {
+  const item = e.target.closest(".item");
+  if (item) show(models.find((m) => m.path === item.dataset.path));
+});
+$("#filter").addEventListener("input", renderList);
+load().catch((e) => { $("#main").innerHTML = `<div class="empty">Erreur : ${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
